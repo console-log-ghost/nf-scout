@@ -1,9 +1,17 @@
 NF Scout Report
 
+Generated: 2026-06-22 18:21
+
 Project path:
 D:/Mycelium/TTRPG/Narrative Framework
 
-Generated: 2026-06-17 13:33
+Markdown files found: 77
+
+Categories detected:
+- CARL: 7
+- NF Folder Structure: 61
+- Tools: 7
+- .obsidian: 0
 
 Markdown Files:
 D:/Mycelium/TTRPG/Narrative Framework\!!README.NF.md
@@ -83,5 +91,3 @@ D:/Mycelium/TTRPG/Narrative Framework\Tools\NF App\File Import Functionality.md
 D:/Mycelium/TTRPG/Narrative Framework\Tools\NF App\NF Application.md
 D:/Mycelium/TTRPG/Narrative Framework\Tools\NF App\NF Dashboard Creation Process.md
 D:/Mycelium/TTRPG/Narrative Framework\Tools\NF App\NF Dashboard-Plugin Acceptance Criteria.md
-
-Markdown files found: 77
