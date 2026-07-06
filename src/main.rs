@@ -4,30 +4,31 @@ use std::env; // Standard Library - Environment Interaction
 use std::fs; // File System
 use std::path::Path; // More proper type for filesystem paths
 
+#[derive(Debug)]
+struct ScanResult {
+    files: Vec<String>,
+    stubs: Vec<String>,
+}
+
 fn main() {
-    // Creates an arguments variable, adds growable text values to the variable,
-    // and tells it that it is interacting with the environment to "collect".
+    // Expandable text-value arguments variable, set to collect
     let args: Vec<String> = env::args().collect();
 
-    // Identifies if it received a folder path, if not indicates that it requires
-    // a folder path, and then returns.
+    // Confirms if folder path is provided, with a fallback process.
     if args.len() < 2 {
         println!("Please Provide a folder path.");
         return;
     }
 
-    // Borrows the first user-provided command-line argument as the project path.
-    let project_path = &args[1];
+    let project_path = &args[1]; // Uses provided folder path as project path. 
+    
+    let scan_result = scan_folder(Path::new(project_path)); 
+    let found_files = &scan_result.files; // Vector count of found files, returns a Vec<String> of the paths.
+    let stub_files = &scan_result.stubs;
+    let categories = scan_categories(Path::new(project_path)); // Determined categories stored in a key-value relationship, allowing for a dynamic report of the folder structure.  
+    let markdown_count = found_files.len(); // Count of found markdown files.
 
-    let found_files = scan_folder(Path::new(project_path));
-    let categories = scan_categories(Path::new(project_path));
-    let markdown_count = found_files.len();
-
-    // New `mut` variable ─`report`─ creates a string, stores strings ─push_str()─, gives back strings ─&format!─,
-    // Uses `\n`to create new-line characters inside a string, replaces `println!()` used to create a creak in the text.
-    // Uses chrono to stamp time of report generation, prints it on report it.
-    // Uses `print!` instead of `println!` since we put breaks already baked in the strings ─ `\n`
-
+    // Report generation section, creates a String variable to hold the report text.
     let mut report = String::new();
     report.push_str("NF Scout Report\n\n");
     let timestamp = Local::now().format("%Y-%m-%d %H:%M").to_string();
@@ -38,20 +39,22 @@ fn main() {
     for (name, count) in &categories {
         report.push_str(&format!("- {}: {}\n", name, count));
     }
+    if !stub_files.is_empty() {
+        report.push_str("\nPossible issues:\n");
+        report.push_str(&format!("Empty or stub files ({} found):\n", stub_files.len()));
+        for stub in stub_files {
+            report.push_str(&format!("- {}\n", stub));
+        }
+    }
+        
     report.push_str("\nMarkdown Files:\n");
-    for file in &found_files {
+    for file in found_files {
         report.push_str(&format!("{}\n", file));
     }
 
     print!("{}", report);
 
-    // variable ─`output_path`─, does a safe check `args.en() >2`, 
-    //if user provides a file path it will print to that folder under a provided files nale.
-    // If user does not provide a path, it will fall back to creating the report in the path folder
-    // Takes the project folder name and uses it to name the report `{project folder name}_report.md`
-    //expect associated error.
-    // prints to the path
-    
+    // Determine output path for the report file. If a second argument is provided, use it as the output path. 
     let output_path = if args.len() > 2 {
         args[2].clone()
     } else {
@@ -65,66 +68,71 @@ fn main() {
     println!("Report saved to: {}", output_path)
 }
 
-// Vec<String> — a growable list of text values holding the found file paths.
-// Alternative to the old `usize` return, which only gave back a count.
-fn scan_folder(folder: &Path) -> Vec<String> {
-    // Read further into a scanned folder path
-    let entries = fs::read_dir(folder).expect("Could not read folder"); 
-    let mut found_files: Vec<String> = Vec::new(); // Vec::new() — creates an empty list to fill
+fn is_stub_file(file_path: &Path) -> bool {
+    if let Ok(contents) = fs::read_to_string(file_path) {
+        contents.len() < 50
+    } else {
+        false
+    }
+}
 
+// Scan a folder recursively for markdown files, returning a Vec<String> of the found file paths.
+fn scan_folder(folder: &Path) -> ScanResult {
+    // Read further into a scanned folder path and create an empty list to fill with found files. 
+    let entries = fs::read_dir(folder).expect("Could not read folder");
+    let mut found_files: Vec<String> = Vec::new(); // Vec::new() — creates an empty list to fill
+    let mut stub_files: Vec<String> = Vec::new(); 
+
+    // Item loop to read each entry in the folder, checking if it's a directory or a markdown file.
     for entry in entries {
         let entry = entry.expect("Could not read entry");
         let path = entry.path();
-
-        // My understanding: If a path is a dir/folder, identify as sub_files — a Vec<String>.
-        // Recursively scan through all connected paths. When there is no more to scan,
-        // if the extension is `md`, push the path as text into the list.
         if path.is_dir() {
-            let mut sub_files = scan_folder(&path);
-            found_files.append(&mut sub_files);
+            let mut sub_result = scan_folder(&path);
+            found_files.append(&mut sub_result.files);
+            stub_files.append(&mut sub_result.stubs);
         } else if path.extension().and_then(|ext| ext.to_str()) == Some("md") {
             found_files.push(path.display().to_string());
+            if is_stub_file(&path) {
+                stub_files.push(path.display().to_string());
+            }
         }
     }
-    found_files // No `;` — returns the list to the function caller.
+    ScanResult {
+        files: found_files,
+        stubs: stub_files,
+    }
+
 }
 
-// Creates a function that takes a borrowed folder path and returns a HashMap —
-// a key-value store where the key is the category name (folder name as a String)
-// and the value is how many .md files live inside it (a usize count).
-// The `mut` on categories means we're going to fill it up as we go — it starts empty.
-// `entries` is the raw list of everything directly inside the top-level folder.
+
+
+// Scan the top-level folder for subfolders (categories) and count the number of markdown files in each.
 fn scan_categories(folder: &Path) -> HashMap<String, usize> {
+    
+    // Create a HashMap to store category names and their corresponding markdown file counts.
     let mut categories: HashMap<String, usize> = HashMap::new();
     let entries = fs::read_dir(folder).expect("Could not read folder.");
-
-    // Loop over every item directly inside the folder (not recursively — just the top layer).
-    // Each `entry` is unwrapped from a Result because reading from disk can fail.
-    // `path` is that entry's full filesystem path.
+    // Iterate through each entry in the folder.
     for entry in entries {
         let entry = entry.expect("Could not read entry.");
         let path = entry.path();
 
-        // Only care about directories — skip loose files at the root level.
-        // If it is a directory: extract just the folder's own name (not the full path),
-        // convert it to a String we can own and store.
-        // .map() transforms the name if it exists. .unwrap_or_else() is the fallback —
-        // if file_name() returns nothing (rare edge case), use "unknown" instead of crashing.
+        // Check if the entry is a directory (category) and process it.
         if path.is_dir() {
+            let folder_name_str = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if folder_name_str.starts_with('.') {
+                continue;
+            }
             let category_name = path
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| String::from("unknown"));
-
-            // Reuse scan_folder to recursively count all .md files inside this subfolder.
-            // `files` is a Vec<String> of those paths. We only need the count, so .len() gives us that.
-            // .insert() stores the pair: folder name → file count into the HashMap.
-            let files = scan_folder(&path);
-            categories.insert(category_name, files.len());
+            let result = scan_folder(&path);
+            categories.insert(category_name, result.files.len());
         }
     }
-    // No semicolon — this returns `categories` to whoever called the function.
-    categories
+    categories // Send to main() for report generation
 }
 
 // ============================================================
